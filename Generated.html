@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update GitHub File</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        label { display: block; margin-top: 10px; }
+        input[type="text"], textarea { width: 90%; max-width: 500px; padding: 8px; margin-top: 5px; }
+        textarea { height: 150px; }
+        button { padding: 10px 15px; margin-top: 15px; cursor: pointer; }
+        #status { margin-top: 20px; font-weight: bold; }
+        .warning { color: red; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <h1>Update File in GitHub Repository via Actions</h1>
+
+    <label for="owner">Repository Owner (e.g., your-username):</label>
+    <input type="text" id="owner" value="your-username">
+
+    <label for="repo">Repository Name:</label>
+    <input type="text" id="repo" value="your-repo-name">
+
+    <label for="filePath">File Path in Repository (e.g., data/my_file.txt):</label>
+    <input type="text" id="filePath" value="path/to/your/file.txt">
+
+    <label for="fileContent">File Content:</label>
+    <textarea id="fileContent">Hello from static page! Timestamp: </textarea>
+
+    <label for="pat">GitHub Personal Access Token (PAT):</label>
+    <input type="text" id="pat" placeholder="Required if target repo is private or for dispatch">
+    <p class="warning">
+        <strong>Security Warning:</strong> For private repositories, a PAT with 'repo' scope is needed to trigger the dispatch.
+        If this page is public, anyone seeing the PAT can use it.
+        It's best if the target repository is public, then this PAT might not be needed for dispatch,
+        but the Action itself will still need its own secret PAT to commit.
+        If the target repo is PUBLIC, you can try leaving this blank, but GitHub might rate-limit or block unauthenticated API requests.
+    </p>
+
+    <button onclick="triggerUpdate()">Update File</button>
+
+    <div id="status"></div>
+
+    <script>
+        async function triggerUpdate() {
+            const owner = document.getElementById('owner').value.trim();
+            const repo = document.getElementById('repo').value.trim();
+            const filePath = document.getElementById('filePath').value.trim();
+            let fileContent = document.getElementById('fileContent').value;
+            const pat = document.getElementById('pat').value.trim(); // PAT to trigger the dispatch
+            const statusDiv = document.getElementById('status');
+
+            if (!owner || !repo || !filePath || !fileContent) {
+                statusDiv.textContent = 'Error: All fields (except PAT if repo is public) must be filled.';
+                statusDiv.style.color = 'red';
+                return;
+            }
+
+            // Append a timestamp to make content unique for testing
+            fileContent += new Date().toISOString();
+
+            // Base64 encode the content
+            // Using TextEncoder for robust UTF-8 handling before btoa
+            const encoder = new TextEncoder();
+            const data = encoder.encode(fileContent);
+            const base64Content = btoa(String.fromCharCode.apply(null, data));
+
+
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/dispatches`;
+
+            const headers = {
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json',
+            };
+
+            // Add Authorization header ONLY if PAT is provided.
+            // For public repos, triggering dispatch might work without PAT,
+            // but for private repos, or to avoid rate limits, it's often needed.
+            if (pat) {
+                headers['Authorization'] = `Bearer ${pat}`;
+            }
+
+            const body = JSON.stringify({
+                event_type: 'update-file-event', // Must match the type in workflow YAML
+                client_payload: {
+                    filename: filePath,
+                    content_base64: base64Content
+                }
+            });
+
+            statusDiv.textContent = 'Sending request...';
+            statusDiv.style.color = 'blue';
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: headers,
+                    body: body
+                });
+
+                if (response.ok) { // Status 204 No Content is typical for dispatch
+                    statusDiv.textContent = `Success! Dispatch event sent. Status: ${response.status}. Check Actions tab in '${owner}/${repo}'.`;
+                    statusDiv.style.color = 'green';
+                } else {
+                    const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response.' }));
+                    statusDiv.textContent = `Error: ${response.status} - ${errorData.message || response.statusText}`;
+                    statusDiv.style.color = 'red';
+                    console.error('Error details:', errorData);
+                }
+            } catch (error) {
+                statusDiv.textContent = `Network Error: ${error.message}`;
+                statusDiv.style.color = 'red';
+                console.error('Network error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
