@@ -2,7 +2,7 @@ name: Update File from Static Page
 
 on:
   repository_dispatch:
-    types: [update-file-event]
+    types: [update-file-event] # 这个名字可以自定义，要和JS里调用时一致
 
 jobs:
   update_file:
@@ -11,29 +11,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # 我们需要用一个有写权限的 PAT 来推送更改
+          # GITHUB_TOKEN 的权限可能不够，特别是对于 repository_dispatch 触发的
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
-
-      - name: Validate file path
-        id: validate_path
-        run: |
-          FILE_PATH="${{ github.event.client_payload.filename }}"
-          # 检查路径是否以指定目录开头（如 uploads/）
-          if [[ "$FILE_PATH" != uploads/* ]]; then
-            echo "Error: File must be placed in uploads directory"
-            exit 1
-          fi
-          # 防止路径穿越攻击
-          REAL_PATH=$(realpath "$FILE_PATH")
-          if [[ "$REAL_PATH" != "$(realpath "uploads")"/* ]]; then
-            echo "Error: Invalid path traversal attempt"
-            exit 1
-          fi
 
       - name: Get data from payload
         id: payload_data
         run: |
           echo "filename=${{ github.event.client_payload.filename }}" >> $GITHUB_OUTPUT
           echo "content_base64=${{ github.event.client_payload.content_base64 }}" >> $GITHUB_OUTPUT
+          # 如果文件路径包含目录，先创建目录
           FILE_PATH="${{ github.event.client_payload.filename }}"
           DIR_NAME=$(dirname "$FILE_PATH")
           if [[ "$DIR_NAME" != "." && ! -d "$DIR_NAME" ]]; then
@@ -41,42 +28,26 @@ jobs:
             echo "Created directory: $DIR_NAME"
           fi
 
-      - name: Handle file conflict
-        id: conflict_handler
-        run: |
-          FILE_PATH="${{ steps.payload_data.outputs.filename }}"
-          if [ -f "$FILE_PATH" ]; then
-            # 获取文件首次提交时间作为创建时间
-            TIMESTAMP=$(git log --reverse --format=%cd -- $FILE_PATH | head -n 1 | date +%Y%m%d%H%M%S)
-            # 重命名旧文件
-            BASENAME=$(basename "$FILE_PATH")
-            DIRNAME=$(dirname "$FILE_PATH")
-            EXTENSION="${BASENAME##*.}"
-            FILENAME="${BASENAME%.*}"
-            NEW_NAME="${FILENAME}_${TIMESTAMP}.${EXTENSION}"
-            git mv "$FILE_PATH" "$DIRNAME/$NEW_NAME"
-            echo "Renamed existing file to: $DIRNAME/$NEW_NAME"
-            echo "old_filename=$DIRNAME/$NEW_NAME" >> $GITHUB_OUTPUT
-          fi
-
       - name: Decode and Write File
         run: |
           echo "Writing to file: ${{ steps.payload_data.outputs.filename }}"
           echo "${{ steps.payload_data.outputs.content_base64 }}" | base64 -d > "${{ steps.payload_data.outputs.filename }}"
-          cat "${{ steps.payload_data.outputs.filename }}"
+          cat "${{ steps.payload_data.outputs.filename }}" # Optional: print content for debugging
 
       - name: Commit and Push changes
         run: |
           git config --global user.name "GitHub Action Bot"
-          git config --global user.email "actions@github.com"
+          git config --global user.email "actions@github.com" # 或者你自己的邮箱
           git add "${{ steps.payload_data.outputs.filename }}"
-          # 如果存在重命名的旧文件也添加
-          if [ -n "${{ steps.conflict_handler.outputs.old_filename }}" ]; then
-            git add "${{ steps.conflict_handler.outputs.old_filename }}"
-            git commit -m "Update ${{ steps.payload_data.outputs.filename }} and archive old version"
-          else
+          # 检查是否有更改需要提交
+          if ! git diff --staged --quiet; then
             git commit -m "Update ${{ steps.payload_data.outputs.filename }} via Action"
+            git push
+          else
+            echo "No changes to commit for ${{ steps.payload_data.outputs.filename }}."
           fi
-          git push
         env:
+          # GITHUB_TOKEN 默认可能没有写权限，所以我们用自定义的 PAT
+          # 如果 checkout步骤已经用了带写权限的token，这里可能就不需要显式指定
+          # 但为了清晰，可以保留。如果checkout步骤的token足够，git push 会自动使用它。
           GH_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
