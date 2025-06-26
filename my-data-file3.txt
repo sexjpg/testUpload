@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Page with GitHub Uploader</title>
+    <style>
+        /* Basic styling */
+        body { font-family: sans-serif; margin: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="text"], textarea { width: 100%; max-width: 400px; padding: 8px; box-sizing: border-box; }
+        textarea { height: 100px; }
+        button { padding: 10px 15px; }
+        #uploadStatus { margin-top: 15px; padding: 10px; border: 1px solid transparent; }
+        #uploadStatus.sending { border-color: #ccc; background-color: #f0f0f0; }
+        #uploadStatus.success { border-color: green; background-color: #e6ffe6; color: green; }
+        #uploadStatus.error { border-color: red; background-color: #ffe6e6; color: red; }
+        #uploadStatus.warning { border-color: orange; background-color: #fff3e0; color: orange; }
+    </style>
+</head>
+<body>
+    <h1>Upload Data to GitHub</h1>
+
+    <div class="form-group">
+        <label for="ghOwner">GitHub Owner:</label>
+        <input type="text" id="ghOwner" value="your-username">
+    </div>
+    <div class="form-group">
+        <label for="ghRepo">GitHub Repo Name:</label>
+        <input type="text" id="ghRepo" value="your-repo-name">
+    </div>
+    <div class="form-group">
+        <label for="ghFilePath">File Path (e.g., content/data.txt):</label>
+        <input type="text" id="ghFilePath" value="my-data-file.txt">
+    </div>
+    <div class="form-group">
+        <label for="ghFileContent">File Content:</label>
+        <textarea id="ghFileContent">This is the content to upload.</textarea>
+    </div>
+    <div class="form-group">
+        <label for="ghPat">GitHub PAT (for dispatch):</label>
+        <input type="text" id="ghPat" placeholder="Enter your PAT here">
+        <small>Required to trigger the GitHub Action.</small>
+    </div>
+
+    <button id="uploadButton">Upload to GitHub</button>
+    <div id="uploadStatus"></div>
+
+    <!-- 1. 引入封装的 JS 文件 -->
+    <script src="githubFileUpdater.js"></script>
+
+    <!-- 2. 编写调用逻辑 -->
+    <script>
+        const uploadButton = document.getElementById('uploadButton');
+        const statusDiv = document.getElementById('uploadStatus');
+
+        function displayStatus(statusUpdate) {
+            statusDiv.textContent = statusUpdate.message;
+            statusDiv.className = ''; // Reset classes
+            statusDiv.classList.add(statusUpdate.status); // 'sending', 'success', 'error', 'warning'
+            console.log('Status Update:', statusUpdate);
+        }
+
+        uploadButton.addEventListener('click', async () => {
+            const owner = document.getElementById('ghOwner').value.trim();
+            const repo = document.getElementById('ghRepo').value.trim();
+            const filePath = document.getElementById('ghFilePath').value.trim();
+            const fileContent = document.getElementById('ghFileContent').value; // Keep original newlines etc.
+            const pat = document.getElementById('ghPat').value.trim();
+
+            if (!pat) {
+                displayStatus({status: 'error', message: 'Error: GitHub PAT is required to trigger the action.'});
+                return;
+            }
+
+            // // 添加时间戳，便于测试时内容不同
+            // const contentWithTimestamp = `${fileContent}\nUpdated: ${new Date().toISOString()}`;
+            // ✅ 替换为原始内容
+            const contentWithTimestamp = fileContent;
+
+            displayStatus({ status: 'sending', message: 'Initiating upload...' });
+
+            try {
+                const result = await updateGitHubFile({
+                    owner: owner,
+                    repo: repo,
+                    filePath: filePath,
+                    fileContent: contentWithTimestamp,
+                    pat: pat,
+                    // eventType: 'custom-event-if-needed', // Optional: if your workflow uses a different event type
+                    onStatusUpdate: displayStatus // Pass the callback function
+                });
+
+                // The onStatusUpdate callback already handles detailed messages.
+                // You can add more logic here based on 'result.success' if needed.
+                if (result.success) {
+                    console.log("Dispatch successful:", result.message);
+                } else {
+                    console.error("Dispatch failed:", result.message, result.errorDetails);
+                }
+
+            } catch (error) {
+                // This catch block is mostly for unexpected errors in the updateGitHubFile function itself,
+                // as internal fetch errors are already handled and returned in the result object.
+                displayStatus({ status: 'error', message: `Critical error: ${error.message}` });
+                console.error("Critical error during updateGitHubFile call:", error);
+            }
+        });
+    </script>
+</body>
+</html>
