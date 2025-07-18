@@ -19,7 +19,7 @@ jobs:
         id: payload_data
         run: |
           UPLOAD_PATH="Uploads"
-          echo "filename=${{ github.event.client_payload.filename }}" >> $GITHUB_OUTPUT
+          echo "filename=$UPLOAD_PATH/${{ github.event.client_payload.filename }}" >> $GITHUB_OUTPUT
           echo "content_base64=${{ github.event.client_payload.content_base64 }}" >> $GITHUB_OUTPUT
           # 如果文件路径包含目录，先创建目录
           FILE_PATH=$UPLOAD_PATH/${{ github.event.client_payload.filename }}
