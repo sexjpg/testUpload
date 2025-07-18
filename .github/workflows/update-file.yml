@@ -18,10 +18,11 @@ jobs:
       - name: Get data from payload
         id: payload_data
         run: |
+          UPLOAD_PATH = 'Uploads'
           echo "filename=${{ github.event.client_payload.filename }}" >> $GITHUB_OUTPUT
           echo "content_base64=${{ github.event.client_payload.content_base64 }}" >> $GITHUB_OUTPUT
           # 如果文件路径包含目录，先创建目录
-          FILE_PATH="${{ github.event.client_payload.filename }}"
+          FILE_PATH="$UPLOAD_PATH\${{ github.event.client_payload.filename }}"
           DIR_NAME=$(dirname "$FILE_PATH")
           if [[ "$DIR_NAME" != "." && ! -d "$DIR_NAME" ]]; then
             mkdir -p "$DIR_NAME"
