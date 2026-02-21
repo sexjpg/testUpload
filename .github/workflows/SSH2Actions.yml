@@ -60,7 +60,7 @@ jobs:
 
       - name: Upload to GitHub Artifacts
         if: steps.check_outputs.outputs.folder_not_empty == 'true'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: outputs
           path: outputs.zip
