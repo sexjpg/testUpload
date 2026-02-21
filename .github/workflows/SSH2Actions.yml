@@ -1,0 +1,67 @@
+name: SSH2Actions
+
+on:
+  workflow_dispatch:
+    inputs:
+      SSH:
+        description: "SSH 连接到 Actions"
+        required: false
+        default: "true"
+      python_version:
+        description: "Python版本"
+        required: true
+        default: "3.8"
+      timeout_min:
+        description: "SSH超时时间(分钟)"
+        required: true
+        default: "30"
+      retention_days:
+        description: "Artifact保留天数"
+        required: true
+        default: "30"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Setup Python ${{ github.event.inputs.python_version }}
+    steps:
+      - uses: actions/checkout@main
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ github.event.inputs.python_version }}
+
+      - name: Initialization
+        run: |
+          echo ${{ github.event.inputs.python_version }}
+          # chmod +x init*.sh
+          # source initpy.sh
+
+      - name: Start tmate session (SSH debug)
+        uses: mxschmitt/action-tmate@v3
+        if: (github.event.inputs.SSH == 'true' && github.event.inputs.SSH  != 'false') || contains(github.event.action, 'SSH')
+        with:
+          timeout-min: ${{ github.event.inputs.timeout_min }}
+
+      - name: Check outputs folder
+        id: check_outputs
+        run: |
+          if [ -d "outputs" ] && [ "$(ls -A outputs)" ]; then
+            echo "folder_not_empty=true" >> $GITHUB_OUTPUT
+            echo "outputs 文件夹不为空，将执行打包上传"
+          else
+            echo "folder_not_empty=false" >> $GITHUB_OUTPUT
+            echo "outputs 文件夹为空，跳过打包上传"
+          fi
+
+      - name: Zip outputs folder
+        if: steps.check_outputs.outputs.folder_not_empty == 'true'
+        run: |
+          zip -r outputs.zip outputs/
+
+      - name: Upload to GitHub Artifacts
+        if: steps.check_outputs.outputs.folder_not_empty == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: outputs
+          path: outputs.zip
+          retention-days: ${{ github.event.inputs.retention_days }}
